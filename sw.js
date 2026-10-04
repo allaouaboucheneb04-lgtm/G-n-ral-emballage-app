@@ -1,4 +1,4 @@
-const C='general-emballage-v24';
+const C='general-emballage-v25';
 const CORE=['./','index.html','style.css','app.js','manifest.webmanifest','icon.svg'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll(CORE))));
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([caches.keys().then(a=>Promise.all(a.filter(x=>x!==C).map(x=>caches.delete(x)))),self.clients.claim()])));

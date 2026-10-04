@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function role() { return me().data.role; }
+    function admin() { return signedIn() && role() == 'admin'; }
+    function storekeeper() { return signedIn() && role() == 'magasinier'; }
+    function staff() { return admin() || storekeeper(); }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.role == 'mecanicien';
+      allow update: if admin()
+        || (signedIn() && request.auth.uid == uid
+            && request.resource.data.role == resource.data.role);
+      allow delete: if admin();
+    }
+
+    match /parts/{id} {
+      allow read: if signedIn();
+      allow create, update: if staff();
+      allow delete: if admin();
+    }
+    match /movements/{id} {
+      allow read: if signedIn();
+      allow create: if staff();
+      allow update, delete: if false;
+    }
+    match /requests/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'En attente';
+      allow update: if staff();
+      allow delete: if admin();
+    }
+    match /orders/{id} {
+      allow read: if signedIn();
+      allow create, update: if staff();
+      allow delete: if admin();
+    }
+    match /suppliers/{id} {
+      allow read: if signedIn();
+      allow create, update: if staff();
+      allow delete: if admin();
+    }
+    match /machines/{id} {
+      allow read: if signedIn();
+      allow write: if admin();
+    }
+    match /settings/{id} {
+      allow read: if signedIn();
+      allow write: if admin();
+    }
+    match /inventories/{id} {
+      allow read: if signedIn();
+      allow create, update: if staff();
+      allow delete: if admin();
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

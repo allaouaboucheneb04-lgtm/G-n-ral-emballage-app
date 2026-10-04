@@ -84,7 +84,21 @@ function toast(t){let x=$('#toast');x.textContent=t;x.style.display='block';setT
 const pages=[['dashboard','🏠 Accueil'],['stock','📦 Stock'],['scan','📷 Scanner'],['requests','📝 Demandes'],['move','🔄 Mouvements'],['orders','🛒 Commandes'],['inventory','📋 Inventaire'],['suppliers','🏭 Fournisseurs'],['alerts','🔔 Alertes'],['reports','📊 Rapports'],['team','👥 Employés'],['settings','⚙️ Réglages'],['account','👤 Compte']]; let page='dashboard';
 function allowedPage(p){let r=currentProfile?.role||'admin';return r==='mecanicien'?['account','dashboard','stock','scan','requests','reports'].includes(p):true}
 function quickNav(){const q=document.querySelector('#quickNav');if(!q)return;const quick=[['dashboard','🏠','Accueil'],['stock','📦','Stock'],['scan','📷','Scanner'],['requests','📝','Demandes']];q.innerHTML=quick.map(([p,i,l])=>`<button class="${page===p?'active':''}" data-p="${p}"><span>${i}</span><small>${l}</small></button>`).join('')+`<button data-menu="1"><span>☰</span><small>Plus</small></button>`;q.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{page=b.dataset.p;nav();render()});q.querySelector('[data-menu]')?.addEventListener('click',openMenu)}
-function nav(){ $('#nav').innerHTML=pages.filter(p=>allowedPage(p[0])).map(p=>`<button class="${page==p[0]?'active':''}" data-p="${p[0]}">${p[1]}</button>`).join(''); document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{page=b.dataset.p;closeMenu();nav();render()});quickNav() }
+function nav(){
+ const visible=pages.filter(p=>allowedPage(p[0])),byId=id=>visible.find(p=>p[0]===id);
+ const item=id=>{let p=byId(id);return p?`<button class="${page===id?'active':''}" data-p="${id}">${p[1]}<i>›</i></button>`:''};
+ const group=(title,ids)=>{let body=ids.map(item).join('');return body?`<section class="navGroup"><span>${title}</span>${body}</section>`:''};
+ $('#nav').innerHTML=`<div class="navMobileHead"><div class="navBrand">GE</div><div><b>General Emballage</b><span>FFG-970/2400 #196</span></div><button id="navClose">×</button></div>
+  <div class="navPrimary">${item('dashboard')}${item('stock')}${item('scan')}${item('requests')}</div>
+  <div class="navGrouped">
+   ${group('STOCK',['move','inventory','alerts'])}
+   ${group('APPROVISIONNEMENT',['orders','suppliers'])}
+   ${group('GESTION',['reports','team','settings'])}
+   ${group('COMPTE',['account'])}
+  </div>`;
+ document.querySelectorAll('#nav button[data-p]').forEach(b=>b.onclick=()=>{page=b.dataset.p;closeMenu();nav();render()});
+ document.querySelector('#navClose')?.addEventListener('click',closeMenu);quickNav()
+}
 const money=n=>new Intl.NumberFormat('fr-CA',{style:'currency',currency:S.settings.currency||'CAD'}).format(+n||0); const low=x=>(+x.qty||0)<=(+x.minQty||0);
 function render(){const shell=document.body;if(!currentUser){page='account';shell.classList.add('authMode');account();return}shell.classList.remove('authMode');({account,dashboard,stock,scan,requests,move,orders,inventory,suppliers,alerts,reports,team,settings}[page]||dashboard)()}
 function updateAccount(){let b=document.querySelector('#accountState');if(b)b.textContent=currentUser?'☁️ '+(currentProfile?.role||'')+' · '+currentUser.email:'☁️ Connexion'}

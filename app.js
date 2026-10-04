@@ -56,7 +56,7 @@ async function cloudSave(){
 }
 const save=()=>{localStorage.setItem(K,JSON.stringify(S));cloudSave();toast(currentUser?'Synchronisé':'Enregistré localement')}; const $=s=>document.querySelector(s); const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 function toast(t){let x=$('#toast');x.textContent=t;x.style.display='block';setTimeout(()=>x.style.display='none',1200)}
-const pages=[['account','Compte'],['dashboard','Accueil'],['stock','Stock'],['scan','Scanner'],['requests','Demandes'],['move','Entrée / sortie'],['orders','Commandes'],['inventory','Inventaire'],['suppliers','Fournisseurs'],['alerts','Alertes'],['reports','Rapports'],['team','Employés'],['settings','Réglages']]; let page='dashboard';
+const pages=[['dashboard','⌂ Accueil'],['stock','▦ Stock'],['scan','⌁ Scanner'],['requests','✦ Demandes'],['move','↕ Mouvements'],['orders','□ Commandes'],['inventory','✓ Inventaire'],['suppliers','◇ Fournisseurs'],['alerts','! Alertes'],['reports','▥ Rapports'],['team','♙ Employés'],['settings','⚙ Réglages'],['account','◉ Compte']]; let page='dashboard';
 function allowedPage(p){let r=currentProfile?.role||'admin';return r==='mecanicien'?['account','dashboard','stock','scan','requests','reports'].includes(p):true}
 function nav(){ $('#nav').innerHTML=pages.filter(p=>allowedPage(p[0])).map(p=>`<button class="${page==p[0]?'active':''}" data-p="${p[0]}">${p[1]}</button>`).join(''); document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{page=b.dataset.p;nav();render()}) }
 const money=n=>new Intl.NumberFormat('fr-CA',{style:'currency',currency:S.settings.currency||'CAD'}).format(+n||0); const low=x=>(+x.qty||0)<=(+x.minQty||0);

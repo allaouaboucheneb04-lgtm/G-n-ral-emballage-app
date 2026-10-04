@@ -2,9 +2,58 @@ const K='macarbox-stock-v1';
 const defaultState=()=>({items:structuredClone(window.CATALOG),moves:[],orders:[],suppliers:[],requests:[],employees:[{id:'admin',name:'Administrateur',role:'Admin'}],machines:['FFG-970/2400'],settings:{currency:'CAD',company:'General Emballage',defaultMin:1,currentUser:'Administrateur'}});
 let S=(()=>{try{return JSON.parse(localStorage.getItem(K))||defaultState()}catch(e){return defaultState()}})();
 const firebaseConfig={apiKey:"AIzaSyBA0wdXAHmZg5wazDrxxbuGD1hrX-0iojU",authDomain:"general-emballage.firebaseapp.com",projectId:"general-emballage",storageBucket:"general-emballage.firebasestorage.app",messagingSenderId:"813924427671",appId:"1:813924427671:web:4914ad26f4a4a2e87e06d2",measurementId:"G-04Z1N77M9L"};
-let cloud=null,auth=null,currentUser=null,cloudTimer=null;
-async function initCloud(){try{const [{initializeApp},{getFirestore,doc,getDoc,setDoc,onSnapshot},{getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut,GoogleAuthProvider,signInWithPopup,signInWithRedirect}]=await Promise.all([import('https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js'),import('https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js')]);let app=initializeApp(firebaseConfig);cloud={db:getFirestore(app),doc,getDoc,setDoc,onSnapshot};auth={a:getAuth(app),onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut,GoogleAuthProvider,signInWithPopup,signInWithRedirect};auth.onAuthStateChanged(auth.a,async u=>{currentUser=u;if(u){S.settings.currentUser=u.email;let ref=cloud.doc(cloud.db,'shared','stock');let snap=await cloud.getDoc(ref);if(!snap.exists())await cloud.setDoc(ref,{state:S,updatedAt:Date.now(),updatedBy:u.email});cloud.onSnapshot(ref,s=>{let d=s.data();if(d?.state){S=d.state;localStorage.setItem(K,JSON.stringify(S));nav();render();updateAccount()}})}updateAccount()})}catch(e){console.warn('Firebase',e);toast('Mode local')}} 
-async function cloudSave(){if(!cloud||!currentUser)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(()=>cloud.setDoc(cloud.doc(cloud.db,'shared','stock'),{state:S,updatedAt:Date.now(),updatedBy:currentUser.email}).catch(e=>console.error(e)),250)}
+let cloud=null,auth=null,currentUser=null,currentProfile=null,cloudTimer=null,remoteApplying=false;
+const COLS={items:'parts',moves:'movements',orders:'orders',suppliers:'suppliers',requests:'requests',employees:'users',machines:'machines'};
+async function initCloud(){try{
+ const [{initializeApp},{getFirestore,collection,doc,getDoc,getDocs,setDoc,deleteDoc,onSnapshot,writeBatch},{getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut,GoogleAuthProvider,signInWithPopup,signInWithRedirect}]=await Promise.all([
+ import('https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js'),
+ import('https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js'),
+ import('https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js')]);
+ let app=initializeApp(firebaseConfig);
+ cloud={db:getFirestore(app),collection,doc,getDoc,getDocs,setDoc,deleteDoc,onSnapshot,writeBatch};
+ auth={a:getAuth(app),onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut,GoogleAuthProvider,signInWithPopup,signInWithRedirect};
+ auth.onAuthStateChanged(auth.a,async u=>{currentUser=u;currentProfile=null;if(u){await ensureProfile();await loadCloud();watchCloud()}updateAccount();nav();render()});
+}catch(e){console.warn('Firebase',e);toast('Mode local')}}
+async function ensureProfile(){
+ let ref=cloud.doc(cloud.db,'users',currentUser.uid),snap=await cloud.getDoc(ref);
+ if(snap.exists()){currentProfile=snap.data();return}
+ let users=await cloud.getDocs(cloud.collection(cloud.db,'users'));
+ let role=users.empty?'admin':'mecanicien';
+ currentProfile={id:currentUser.uid,name:currentUser.displayName||currentUser.email,email:currentUser.email,role};
+ await cloud.setDoc(ref,currentProfile);
+}
+async function loadCloud(){
+ remoteApplying=true;
+ for(const [key,col] of Object.entries(COLS)){let qs=await cloud.getDocs(cloud.collection(cloud.db,col));if(!qs.empty)S[key]=qs.docs.map(d=>({id:d.id,...d.data()}))}
+ let cfg=await cloud.getDoc(cloud.doc(cloud.db,'settings','general'));if(cfg.exists())S.settings={...S.settings,...cfg.data()};
+ localStorage.setItem(K,JSON.stringify(S));remoteApplying=false;
+ if((await cloud.getDocs(cloud.collection(cloud.db,'parts'))).empty&&currentProfile?.role==='admin')await migrateSeed();
+}
+async function migrateSeed(){
+ let batch=cloud.writeBatch(cloud.db),n=0;
+ for(const x of S.items){batch.set(cloud.doc(cloud.db,'parts',String(x.id)),x);if(++n%400===0){await batch.commit();batch=cloud.writeBatch(cloud.db)}}
+ await batch.commit();toast('Catalogue initial synchronisé');
+}
+function watchCloud(){
+ Object.entries(COLS).forEach(([key,col])=>cloud.onSnapshot(cloud.collection(cloud.db,col),snap=>{if(snap.metadata.hasPendingWrites)return;remoteApplying=true;S[key]=snap.docs.map(d=>({id:d.id,...d.data()}));localStorage.setItem(K,JSON.stringify(S));remoteApplying=false;render()}));
+ cloud.onSnapshot(cloud.doc(cloud.db,'settings','general'),s=>{if(s.exists()){S.settings={...S.settings,...s.data()};localStorage.setItem(K,JSON.stringify(S));render()}});
+}
+async function syncCollection(key){
+ if(!cloud||!currentUser||remoteApplying)return;
+ const col=COLS[key];if(!col)return;
+ let remote=await cloud.getDocs(cloud.collection(cloud.db,col)),local=new Map((S[key]||[]).map(x=>[String(x.id),x]));
+ let batch=cloud.writeBatch(cloud.db);
+ remote.docs.forEach(d=>{if(!local.has(d.id))batch.delete(d.ref)});
+ local.forEach((x,id)=>batch.set(cloud.doc(cloud.db,col,id),x));
+ await batch.commit();
+}
+async function cloudSave(){
+ if(!cloud||!currentUser||remoteApplying)return;
+ clearTimeout(cloudTimer);cloudTimer=setTimeout(async()=>{try{
+  for(const key of Object.keys(COLS))await syncCollection(key);
+  await cloud.setDoc(cloud.doc(cloud.db,'settings','general'),S.settings,{merge:true});
+ }catch(e){console.error(e);toast('Synchronisation refusée') }},300)
+}
 const save=()=>{localStorage.setItem(K,JSON.stringify(S));cloudSave();toast(currentUser?'Synchronisé':'Enregistré localement')}; const $=s=>document.querySelector(s); const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 function toast(t){let x=$('#toast');x.textContent=t;x.style.display='block';setTimeout(()=>x.style.display='none',1200)}
 const pages=[['account','Compte'],['dashboard','Accueil'],['stock','Stock'],['scan','Scanner'],['requests','Demandes'],['move','Entrée / sortie'],['orders','Commandes'],['inventory','Inventaire'],['suppliers','Fournisseurs'],['alerts','Alertes'],['reports','Rapports'],['team','Employés'],['settings','Réglages']]; let page='dashboard';

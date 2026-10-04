@@ -11,13 +11,25 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn();
       allow create: if signedIn() && request.auth.uid == uid
-        && request.resource.data.role == 'mecanicien';
+        && (
+          request.resource.data.role == 'mecanicien'
+          || (
+            request.resource.data.invitationId is string
+            && get(/databases/$(database)/documents/invitations/$(request.resource.data.invitationId)).data.status == 'pending'
+            && get(/databases/$(database)/documents/invitations/$(request.resource.data.invitationId)).data.email == request.auth.token.email
+            && get(/databases/$(database)/documents/invitations/$(request.resource.data.invitationId)).data.role == request.resource.data.role
+          )
+        );
       allow update: if admin()
         || (signedIn() && request.auth.uid == uid
             && request.resource.data.role == resource.data.role);
       allow delete: if admin();
     }
 
+    match /invitations/{inviteId} {
+      allow read: if signedIn();
+      allow create, update, delete: if admin();
+    }
     match /parts/{id} {
       allow read: if signedIn();
       allow create, update: if staff();

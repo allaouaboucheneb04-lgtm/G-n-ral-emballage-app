@@ -35,7 +35,7 @@ async function initCloud(){try{
 }catch(e){console.warn('Firebase',e);document.body.classList.add('authMode');$('#app').innerHTML='<div class="loginPage"><div class="loginCard"><h2>Connexion indisponible</h2><p class="muted">Impossible de charger le service de connexion. Vérifie Internet puis recharge l’application.</p><button class="btn primary" onclick="location.reload()">Réessayer</button></div></div>'}}
 async function ensureProfile(){
  let ref=cloud.doc(cloud.db,'users',currentUser.uid),snap=await cloud.getDoc(ref);
- if(snap.exists()){currentProfile=snap.data();return}
+ if(snap.exists()){currentProfile={id:currentUser.uid,...snap.data()};return}
  let inviteId=new URLSearchParams(location.search).get('invite'),role='mecanicien',inv=null;
  if(inviteId){try{let s=await cloud.getDoc(cloud.doc(cloud.db,'invitations',inviteId));if(s.exists()){inv=s.data();if((inv.email||'').toLowerCase()===(currentUser.email||'').toLowerCase()&&inv.status==='pending')role=inv.role||'mecanicien'}}catch(e){console.warn('Invitation',e)}}
  currentProfile={id:currentUser.uid,name:currentUser.displayName||currentUser.email,email:currentUser.email,role,invitationId:inv?inviteId:''};
@@ -45,7 +45,7 @@ async function ensureProfile(){
 async function loadCloud(){
  remoteApplying=true;
  for(const [key,col] of Object.entries(COLS)){let qs=await cloud.getDocs(cloud.collection(cloud.db,col));if(!qs.empty)S[key]=key==='items'?mergeDuplicateParts(qs.docs.map(d=>({id:d.id,...d.data()}))):qs.docs.map(d=>({id:d.id,...d.data()}))}
- let cfg=await cloud.getDoc(cloud.doc(cloud.db,'settings','general'));if(cfg.exists())S.settings={...S.settings,...cfg.data()};
+ let cfg=await cloud.getDoc(cloud.doc(cloud.db,'settings','general'));if(cfg.exists())S.settings={...S.settings,...cfg.data()};let mine=S.employees?.find(e=>String(e.id)===String(currentUser?.uid));if(mine)currentProfile={...currentProfile,...mine,id:currentUser.uid};
  localStorage.setItem(K,JSON.stringify(S));remoteApplying=false;
  if((await cloud.getDocs(cloud.collection(cloud.db,'parts'))).empty&&currentProfile?.role==='admin')await migrateSeed();
 }
@@ -55,7 +55,7 @@ async function migrateSeed(){
  await batch.commit();toast('Catalogue initial synchronisé');
 }
 function watchCloud(){
- Object.entries(COLS).forEach(([key,col])=>cloud.onSnapshot(cloud.collection(cloud.db,col),snap=>{if(snap.metadata.hasPendingWrites)return;remoteApplying=true;S[key]=key==='items'?mergeDuplicateParts(snap.docs.map(d=>({id:d.id,...d.data()}))):snap.docs.map(d=>({id:d.id,...d.data()}));localStorage.setItem(K,JSON.stringify(S));remoteApplying=false;render()}));
+ Object.entries(COLS).forEach(([key,col])=>cloud.onSnapshot(cloud.collection(cloud.db,col),snap=>{if(snap.metadata.hasPendingWrites)return;remoteApplying=true;S[key]=key==='items'?mergeDuplicateParts(snap.docs.map(d=>({id:d.id,...d.data()}))):snap.docs.map(d=>({id:d.id,...d.data()}));if(key==='employees'&&currentUser){let mine=S.employees.find(e=>String(e.id)===String(currentUser.uid));if(mine)currentProfile={...currentProfile,...mine,id:currentUser.uid}}localStorage.setItem(K,JSON.stringify(S));remoteApplying=false;updateAccount();nav();render()}));
  cloud.onSnapshot(cloud.doc(cloud.db,'settings','general'),s=>{if(s.exists()){S.settings={...S.settings,...s.data()};localStorage.setItem(K,JSON.stringify(S));render()}});
 }
 async function persistDoc(key,obj,opts={}){
@@ -180,7 +180,7 @@ window.editEmployee=id=>{
  <label>Quart de travail<input id="eshift" placeholder="Jour, soir, nuit…" value="${esc(e.shift||'')}"></label><label>Date d'embauche<input id="ehire" type="date" value="${esc(e.hireDate||'')}"></label>
  <label>Statut<select id="estatus"><option ${(e.status||'Actif')==='Actif'?'selected':''}>Actif</option><option ${e.status==='Inactif'?'selected':''}>Inactif</option></select></label>
  <div class="full"><button class="btn primary" id="esave">Enregistrer la fiche</button></div></div>`;
- $('#esave').onclick=async()=>{Object.assign(e,{name:$('#ename').value.trim(),employeeNumber:$('#enum').value.trim(),jobTitle:$('#ejob').value.trim(),department:$('#edept').value.trim(),workEmail:$('#ework').value.trim(),phone:$('#ephone').value.trim(),shift:$('#eshift').value.trim(),hireDate:$('#ehire').value,status:$('#estatus').value});try{await cloud.setDoc(cloud.doc(cloud.db,'users',String(e.id)),e,{merge:true});if(currentUser?.uid===String(e.id))currentProfile={...currentProfile,...e};saveLocal();toast('✓ Fiche employé enregistrée');go('team')}catch(err){alert('Enregistrement impossible : '+err.message)}}
+ $('#esave').onclick=async()=>{Object.assign(e,{name:$('#ename').value.trim(),employeeNumber:$('#enum').value.trim(),jobTitle:$('#ejob').value.trim(),department:$('#edept').value.trim(),workEmail:$('#ework').value.trim(),phone:$('#ephone').value.trim(),shift:$('#eshift').value.trim(),hireDate:$('#ehire').value,status:$('#estatus').value});try{await cloud.setDoc(cloud.doc(cloud.db,'users',String(e.id)),e,{merge:true});if(currentUser?.uid===String(e.id))currentProfile={...currentProfile,...e};saveLocal();if(currentUser?.uid===String(e.id))currentProfile={...currentProfile,...e,id:currentUser.uid};toast('✓ Fiche employé enregistrée');updateAccount();go('team')}catch(err){alert('Enregistrement impossible : '+err.message)}}
 }
 async function createInvitation(){
  let email=$('#invEmail').value.trim().toLowerCase(),role=$('#invRole').value;

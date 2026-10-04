@@ -28,7 +28,14 @@ service cloud.firestore {
 
     match /invitations/{inviteId} {
       allow read: if signedIn();
-      allow create, update, delete: if admin();
+      allow create, delete: if admin();
+      allow update: if admin()
+        || (signedIn()
+            && resource.data.status == 'pending'
+            && resource.data.email == request.auth.token.email
+            && request.resource.data.email == resource.data.email
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.status == 'accepted');
     }
     match /parts/{id} {
       allow read: if signedIn();

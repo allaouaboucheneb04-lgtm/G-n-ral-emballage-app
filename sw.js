@@ -1,5 +1,5 @@
-const C='general-emballage-v28';
-const CORE=['./','./index.html','./style.css?v=28','./app.js?v=28','./manifest.webmanifest','./icon.svg'];
+const C='general-emballage-v29';
+const CORE=['./','./index.html','./style.css?v=29','./app.js?v=29','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(C).then(c=>c.addAll(CORE)))});
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([caches.keys().then(a=>Promise.all(a.filter(x=>x!==C).map(x=>caches.delete(x)))),self.clients.claim()])));
 self.addEventListener('message',e=>{if(e.data&&e.data.type==='SKIP_WAITING')self.skipWaiting()});

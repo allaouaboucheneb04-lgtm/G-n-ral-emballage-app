@@ -1,0 +1,23 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function userDoc() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid));
+    }
+    function staff() {
+      return signedIn() &&
+        (userDoc().data.role == 'admin' || userDoc().data.role == 'magasinier');
+    }
+    match /parts/{partId}/{fileName} {
+      allow read: if signedIn();
+      allow create, update: if staff()
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if staff();
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -18,7 +18,7 @@ async function ensureProfile(){
  let ref=cloud.doc(cloud.db,'users',currentUser.uid),snap=await cloud.getDoc(ref);
  if(snap.exists()){currentProfile=snap.data();return}
  let users=await cloud.getDocs(cloud.collection(cloud.db,'users'));
- let role=users.empty?'admin':'mecanicien';
+ let role='mecanicien';
  currentProfile={id:currentUser.uid,name:currentUser.displayName||currentUser.email,email:currentUser.email,role};
  await cloud.setDoc(ref,currentProfile);
 }

@@ -215,7 +215,25 @@ function reports(){let val=S.items.reduce((a,x)=>a+x.qty*x.unitCost,0),cons={};S
 function dl(name,text,type){let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
 window.exportJSON=()=>dl('stock-macarbox-backup.json',JSON.stringify(S,null,2),'application/json');window.exportCSV=()=>{let rows=[['Reference','Description','Section','Type','Stock','Minimum','Emplacement','Cout']].concat(S.items.map(x=>[x.reference,x.description,x.category,x.type,x.qty,x.minQty,x.location,x.unitCost]));dl('stock-macarbox.csv',rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\n'),'text/csv')}
 function settings(){ $('#app').innerHTML=`<h2>Réglages</h2><div class="card formgrid"><label>Entreprise<input id="setco" value="${esc(S.settings.company||'')}"></label><label>Devise<select id="setcur"><option ${S.settings.currency=='CAD'?'selected':''}>CAD</option><option ${S.settings.currency=='EUR'?'selected':''}>EUR</option><option ${S.settings.currency=='USD'?'selected':''}>USD</option></select></label><label>Minimum par défaut<input id="setmin" type="number" value="${S.settings.defaultMin||1}"></label><div class="full"><button class="btn primary" id="setsave">Enregistrer</button> <button class="btn" id="resetcat">Réinitialiser catalogue</button></div></div><div class="card" style="margin-top:12px"><b>Catalogue chargé:</b> FFG-970/2400 #196 · Issue 04/2020<br><span class="muted">${S.items.length} lignes de pièces, sections mécaniques A1–A6/A3.1 et électriques B1–B7.</span></div>`;$('#setsave').onclick=()=>{S.settings={...S.settings,company:$('#setco').value,currency:$('#setcur').value,defaultMin:+$('#setmin').value||1};saveSettings();render()};$('#resetcat').onclick=()=>{if(confirm('Réinitialiser les pièces du catalogue ? Les mouvements et commandes restent.')){let old=new Map(S.items.map(x=>[x.category+'|'+x.reference,x]));S.items=mergeDuplicateParts(structuredClone(window.CATALOG)).map(x=>Object.assign(x,old.get(x.category+'|'+x.reference)||{}));save();render()}}}
-let deferred;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;$('#installBtn').hidden=false});$('#installBtn').onclick=async()=>{if(deferred){deferred.prompt();await deferred.userChoice;deferred=null;$('#installBtn').hidden=true}};if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');initCloud();
+let deferred;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;$('#installBtn').hidden=false});$('#installBtn').onclick=async()=>{if(deferred){deferred.prompt();await deferred.userChoice;deferred=null;$('#installBtn').hidden=true}};if('serviceWorker'in navigator){
+ let refreshing=false;
+ const showUpdate=reg=>{
+  if(!reg?.waiting)return;
+  let old=document.querySelector('#updateBanner');if(old)return;
+  let b=document.createElement('div');b.id='updateBanner';b.className='updateBanner';
+  b.innerHTML='<div><b>Nouvelle version disponible</b><span>Une mise à jour de General Emballage est prête.</span></div><button id="applyUpdate">Mettre à jour</button>';
+  document.body.appendChild(b);
+  b.querySelector('#applyUpdate').onclick=()=>{b.querySelector('button').disabled=true;b.querySelector('button').textContent='Mise à jour…';reg.waiting.postMessage({type:'SKIP_WAITING'})};
+ };
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{if(refreshing)return;refreshing=true;location.reload()});
+ navigator.serviceWorker.register('sw.js').then(reg=>{
+  showUpdate(reg);
+  reg.addEventListener('updatefound',()=>{let w=reg.installing;if(!w)return;w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)showUpdate(reg)})});
+  setInterval(()=>reg.update().catch(()=>{}),15*60*1000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{})});
+ }).catch(e=>console.warn('Service worker',e));
+}
+initCloud();
 
 function openMenu(){document.querySelector('#nav')?.classList.add('open');document.querySelector('#menuBackdrop')?.classList.add('open');document.body.style.overflow='hidden'}
 function closeMenu(){document.querySelector('#nav')?.classList.remove('open');document.querySelector('#menuBackdrop')?.classList.remove('open');document.body.style.overflow=''}
